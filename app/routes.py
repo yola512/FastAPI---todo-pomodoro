@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
-from app.models import Task, TaskBase, Pomodoro
+from app.models import Task, TaskBase, Pomodoro, PomodoroCreate
 from app.database import tasks, pomodoro_sessions, generate_id
 from datetime import datetime, timedelta
 
@@ -75,40 +75,48 @@ def delete_task(task_id: int):
     # delete task
     tasks.remove(task)
 
-    #return {"message": "Task has been deleted"}
+    return {"message": "Task has been deleted"}
 
 # pomodoro
 # create pomodoro timer
 @router.post("/pomodoro")
-def create_timer(task_id: int, timer: Pomodoro, end_time: int = 25):
-    # check if task(task_id) exists
+def create_timer(task_id: int, duration: int = 25):
     task = None
     for t in tasks:
-      if t["id"] == task_id:
-         task = t
-         break
-      
+        if t["id"] == task_id:
+            task = t
+            break
     if task is None:
-       raise HTTPException(status_code=404, detail="Task with this ID doesn't exist.")
+        raise HTTPException(status_code=404, detail="Task with this ID doesn't exist.")
     
-    # check if there's an active pomodoro timer
+    active_session = None
     for session in pomodoro_sessions:
-       if session["task_id"] == task_id and session["completed"] == False:
-          raise  HTTPException(status_code=400, detail="Pomodoro timer is already running for this task.")
+        if session["task_id"] == task_id and session["completed"] == False:
+            active_session = session
+            break
     
-    # create a new pomodoro timer
+    if active_session:
+        raise HTTPException(status_code=400, detail="Pomodoro timer is already running for this task.")
+    
     start_time = datetime.now()
-    end_time = start_time + timedelta(minutes=end_time)
+    end_time = start_time + timedelta(minutes=duration)
 
     pom_session = Pomodoro(task_id = task_id,
-                                 start_time=start_time,
-                                 end_time=end_time,
-                                 completed=False)
+                           start_time=start_time,
+                           end_time=end_time,
+                           completed=False)
     
-    # add new timer to sessions list
     pomodoro_sessions.append(pom_session.model_dump())
 
-    #return {"message": "Pomodoro timer has been created", "pomodoro": pom_session.modeldump()}
+    return {
+        "message": "Pomodoro timer has been created", 
+        "pomodoro": {
+            "task_id": pom_session.task_id,
+            "start_time": pom_session.start_time,
+            "end_time": pom_session.end_time,
+            "completed": pom_session.completed
+        }
+    }
 
 # stop pomodoro timer
 @router.post("/pomodoro/{task_id}/stop")
